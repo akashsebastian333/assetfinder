@@ -1,4 +1,4 @@
-# assetfinder
+# subp
 
 Find domains and subdomains potentially related to a given domain.
 
