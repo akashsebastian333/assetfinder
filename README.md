@@ -13,11 +13,15 @@ subp <domain>
 Please feel free to issue pull requests with new sources! :)
 
 ### Implemented
-* crt.sh
-* certspotter
-* hackertarget
-* threatcrowd
-* wayback machine
+* wayback
+* threatminer
+* sublist3r
+* alienvault
 * dns.bufferover.run
-
-
+* certspotter.com
+* jldc.me
+* hackertarget
+* urlscan
+* threatcrowd
+* sonar
+* crt.sh
