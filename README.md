@@ -1,6 +1,6 @@
 # subp
 
-Find domains and subdomains potentially related to a given domain.
+For finding subdomains of a domain from different public free apis
 
 ## Usage
 
