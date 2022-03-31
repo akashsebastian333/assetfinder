@@ -1,145 +1,406 @@
 package main
 
 import (
-	"bufio"
-	"encoding/json"
-	"flag"
-	"fmt"
-	"io"
-	"io/ioutil"
-	"net/http"
-	"os"
-	"strings"
-	"sync"
-	"time"
+  "github.com/tidwall/gjson"
+  "bufio"
+  "encoding/json"
+  "fmt"
+    "io/ioutil"
+  "net/http"
+  "os"
+  "strings"
+  "log"
+  "bytes"
+  "net/url"
 )
 
 func main() {
-	var subsOnly bool
-	flag.BoolVar(&subsOnly, "subs-only", false, "Only include subdomains of search domain")
-	flag.Parse()
 
-	var domains io.Reader
-	domains = os.Stdin
+  if len(os.Args) <= 1 {
+        fmt.Println("Usage:", os.Args[0], "domain.com")
+        return
+    }
+    
+  domain := os.Args[1]
 
-	domain := flag.Arg(0)
-	if domain != "" {
-		domains = strings.NewReader(domain)
-	}
 
-	sources := []fetchFn{
-		fetchCertSpotter,
-		fetchHackerTarget,
-		fetchThreatCrowd,
-		fetchCrtSh,
-		fetchFacebook,
-		//fetchWayback, // A little too slow :(
-		fetchVirusTotal,
-		fetchFindSubDomains,
-		fetchUrlscan,
-		fetchBufferOverrun,
-	}
+//done
+ d,_ := jldc(domain)
+//done
+ a,_ := hacktarget(domain)
+//done
+  c,_ := urlsc(domain)
+//done
+  g,_ := threatcrowd(domain)
+//done
+  f,_ := sonar(domain)
+//done
+  j,_ := certsh(domain)
+//done
+  e,_ := alien(domain)
+//done
+  b,_ := sublist3r(domain)
+//done
+  h,_ := threatminer(domain)
+//done
+  i,_ := wayback(domain)
+//done
+  k,_ := Buf(domain)
+//done 
+  l,_ := Spotter(domain)
+//done
+  
 
-	out := make(chan string)
-	var wg sync.WaitGroup
+  x := []string{}
+  x = append(d,c...)
+  x = append(x,a...)
+  x = append(x,b...)
+  x = append(x,e...)
+  x = append(x,f...)
+  x = append(x,g...)
+  x = append(x,i...)
+  x = append(x,j...)
+  x = append(x,h...)
+  x = append(x,k...)
+  x = append(x,l...)
 
-	sc := bufio.NewScanner(domains)
-	rl := newRateLimiter(time.Second)
 
-	for sc.Scan() {
-		domain := strings.ToLower(sc.Text())
-
-		// call each of the source workers in a goroutine
-		for _, source := range sources {
-			wg.Add(1)
-			fn := source
-
-			go func() {
-				defer wg.Done()
-
-				rl.Block(fmt.Sprintf("%#v", fn))
-				names, err := fn(domain)
-
-				if err != nil {
-					//fmt.Fprintf(os.Stderr, "err: %s\n", err)
-					return
-				}
-
-				for _, n := range names {
-					n = cleanDomain(n)
-					if subsOnly && !strings.HasSuffix(n, domain) {
-						continue
-					}
-					out <- n
-				}
-			}()
-		}
-	}
-
-	// close the output channel when all the workers are done
-	go func() {
-		wg.Wait()
-		close(out)
-	}()
-
-	// track what we've already printed to avoid duplicates
-	printed := make(map[string]bool)
-
-	for n := range out {
-		if _, ok := printed[n]; ok {
-			continue
-		}
-		printed[n] = true
-
-		fmt.Println(n)
-	}
+remDup := rD(x)
+  for i := 0; i < len(remDup); i++ {
+    if strings.Contains(remDup[i], domain[:len(domain)-3]) {
+      fmt.Println(remDup[i])
+    } else {
+      continue
+    	} 
+    }
 }
 
-type fetchFn func(string) ([]string, error)
+func rD(intSlice []string) []string  {
+    keys := make(map[string]bool)
+    list := []string{}
+    for _, entry := range intSlice {
+      if _, value := keys[entry]; !value {
+        keys[entry] = true
+        list = append(list, entry)
+      }
+    }
+    return list
+  }
 
-func httpGet(url string) ([]byte, error) {
-	res, err := http.Get(url)
-	if err != nil {
-		return []byte{}, err
-	}
 
-	raw, err := ioutil.ReadAll(res.Body)
 
-	res.Body.Close()
-	if err != nil {
-		return []byte{}, err
-	}
+func wayback(domain string) ([]string, error) {
 
-	return raw, nil
+  fetchURL := fmt.Sprintf("http://web.archive.org/cdx/search/cdx?url=*.%s/*&output=json&collapse=urlkey", domain)
+
+  var wrapper [][]string
+  err := getdata(fetchURL, &wrapper)
+  if err != nil {
+    return []string{}, err
+  }
+  d := make([]string, 0)
+  skip := true
+  for _, item := range wrapper {
+    if skip {
+      skip = false
+      continue
+    }
+
+    if len(item) < 3 {
+      continue
+    }
+
+    u, err := url.Parse(item[2])
+    if err != nil {
+      continue
+    }
+
+    d = append(d, u.Hostname())
+  }
+
+  return d, nil
 }
 
-func cleanDomain(d string) string {
-	d = strings.ToLower(d)
+func threatminer(domain string) ([]string, error) {
+  fetchURL := fmt.Sprintf("https://api.threatminer.org/v2/domain.php?q=%s&rt=5", domain)
+  response, err := http.Get(fetchURL)
 
-	// no idea what this is, but we can't clean it ¯\_(ツ)_/¯
-	if len(d) < 2 {
-		return d
-	}
+    if err != nil {
+        fmt.Print(err.Error())
+        os.Exit(1)
+    }
 
-	if d[0] == '*' || d[0] == '%' {
-		d = d[1:]
-	}
+    responseData, err := ioutil.ReadAll(response.Body)
+    if err != nil {
+        log.Fatal(err)
+    }
+  var d []string
+  rdata := string(responseData)
+  result := gjson.Get(rdata, "results")
 
-	if d[0] == '.' {
-		d = d[1:]
-	}
-
-	return d
-
+  
+  for _, name := range result.Array() {
+    d = append(d, name.String())
+  }
+  return d,err
 }
 
-func fetchJSON(url string, wrapper interface{}) error {
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	dec := json.NewDecoder(resp.Body)
+func sublist3r(domain string)([]string, error){
+  fetchURL := fmt.Sprintf("https://api.sublist3r.com/search.php?domain=%s", domain)
+  response, err := http.Get(fetchURL)
+    if err != nil {
+        fmt.Print(err.Error())
+        os.Exit(1)
+    }
+  responseData, err := ioutil.ReadAll(response.Body)
+    if err != nil {
+        log.Fatal(err)
+    }
+  data := strings.Split(string(responseData), ",")
+  var d []string
+  ln := len(data)
+  for i := 0; i < ln; i++ {
+    store := data[i]
+      if i == 0{
+        store = store[1:]
+      }
+      store = store[:len(store)-1]
+      if i == ln-1 {
+        store = store[:len(store)-1]
+      }
+      store = store[1:]
+      d = append(d, store)
+   }
+   return d, err
+}
 
-	return dec.Decode(wrapper)
+
+func alien(domain string)([]string, error) {
+  fetchURL := fmt.Sprintf("https://otx.alienvault.com/api/v1/indicators/domain/%s/passive_dns", domain)
+  response, err := http.Get(fetchURL)
+
+    if err != nil {
+        fmt.Print(err.Error())
+        os.Exit(1)
+    }
+
+    responseData, err := ioutil.ReadAll(response.Body)
+    if err != nil {
+        log.Fatal(err)
+    }
+  var d []string
+  rdata := string(responseData)
+  result := gjson.Get(rdata, "passive_dns.#.hostname")
+  for _, name := range result.Array() {
+    d = append(d, name.String())
+  }
+  return d,err
+}
+
+func getdata(url string, get interface{}) error {
+  response, err := http.Get(url)
+  if err != nil {
+    return err
+  }
+  defer response.Body.Close()
+  dec := json.NewDecoder(response.Body)
+  return dec.Decode(get)
+}
+
+func Buf(domain string) ([]string, error) {
+  domains := make([]string, 0)
+
+  fetchURL := fmt.Sprintf("https://dns.bufferover.run/dns?q=.%s", domain)
+
+  get := struct {
+    Data []string `json:"FDNS_A"`
+  }{}
+  
+  err := getdata(fetchURL, &get)
+  if err != nil {
+    return domains, err
+  }
+
+  for _, r := range get.Data {
+    sites := strings.SplitN(r, ",", 2)
+    if len(sites) != 2 {
+      continue
+    }
+    domains = append(domains, sites[1])
+  }
+
+  return domains, nil
+}
+
+func Spotter(domain string) ([]string, error) {
+  out := make([]string, 0)
+  fetchURL := fmt.Sprintf("https://certspotter.com/api/v1/issuances?domain=%s&include_subdomains=true&expand=dns_names", domain)
+  get := []struct {
+    DNSNames []string `json:"dns_names"`
+  }{}
+  err := getdata(fetchURL, &get)
+  if err != nil {
+    return out, err
+  }
+  for _, d := range get {
+    out = append(out, d.DNSNames...)
+  }
+
+  return out, nil
+}
+
+func jldc(domain string)([]string, error){
+  fetchURL := fmt.Sprintf("https://jldc.me/anubis/subdomains/%s", domain)
+  response, err := http.Get(fetchURL)
+    if err != nil {
+        fmt.Print(err.Error())
+        os.Exit(1)
+    }
+  responseData, err := ioutil.ReadAll(response.Body)
+    if err != nil {
+        log.Fatal(err)
+    }
+  
+  if string(responseData) == `[]` {
+    return nil,nil
+  }
+  var d []string
+  data := strings.Split(string(responseData), ",")
+
+  ln := len(data)
+  for i := 0; i < ln; i++ {
+    store := data[i]
+      if i == 0{
+        store = store[1:]
+      }
+      store = store[:len(store)-1]
+      if i == ln-1 {
+        store = store[:len(store)-1]
+      }
+      store = store[1:]
+    
+      d = append(d, store)
+   }
+   return d,err
+}
+
+func hacktarget(domain string) ([]string, error){
+  fetchURL := fmt.Sprintf("https://api.hackertarget.com/hostsearch/?q=%s", domain)
+  response, err := http.Get(fetchURL)
+  d := make([]string, 0)
+    if err != nil {
+        fmt.Print(err.Error())
+        os.Exit(1)
+    }
+  responseData, err := ioutil.ReadAll(response.Body)
+    if err != nil {
+        log.Fatal(err)
+    }
+  domains := bufio.NewScanner(bytes.NewReader(responseData))
+  for domains.Scan() {
+    parts := strings.SplitN(domains.Text(), ",", 2)
+    if len(parts) != 2 {
+      continue
+    } 
+    d = append(d, parts[0])
+    
+  }
+
+  return d, err
+}
+
+
+func urlsc(domain string) ([]string, error) {
+  fetchURL := fmt.Sprintf("https://urlscan.io/api/v1/search/?q=%s", domain)
+  response, err := http.Get(fetchURL)
+
+    if err != nil {
+        fmt.Print(err.Error())
+        os.Exit(1)
+    }
+
+    responseData, err := ioutil.ReadAll(response.Body)
+    if err != nil {
+        log.Fatal(err)
+    }
+  var d []string
+  rdata := string(responseData)
+  result := gjson.Get(rdata, "results.#.page.domain")
+  for _, name := range result.Array() {
+    d = append(d, name.String())
+  }
+  return d,err
+}
+
+func threatcrowd(domain string) ([]string, error){
+  fetchURL := fmt.Sprintf("https://www.threatcrowd.org/searchApi/v2/domain/report/?domain=%s", domain)
+  response, err := http.Get(fetchURL)
+
+    if err != nil {
+        fmt.Print(err.Error())
+        os.Exit(1)
+    }
+
+    responseData, err := ioutil.ReadAll(response.Body)
+    if err != nil {
+        log.Fatal(err)
+    }
+  var d []string
+  rdata := string(responseData)
+  result := gjson.Get(rdata, "subdomains")
+  for _, name := range result.Array() {
+    d = append(d, name.String())
+  }
+  return d,err
+}
+
+func sonar(domain string) ([]string, error){
+  fetchURL := fmt.Sprintf("https://sonar.omnisint.io/subdomains/%s", domain)
+  response, err := http.Get(fetchURL)
+    if err != nil {
+        fmt.Print(err.Error())
+        os.Exit(1)
+    }
+  responseData, err := ioutil.ReadAll(response.Body)
+    if err != nil {
+        log.Fatal(err)
+    }
+  data := strings.Split(string(responseData), ",")
+  var d []string
+  ln := len(data)
+  for i := 0; i < ln; i++ {
+    store := data[i]
+      if i == 0{
+        store = store[1:]
+      }
+      store = store[:len(store)-1]
+      if i == ln-1 {
+        store = store[:len(store)-1]
+      }
+      store = store[1:]
+      d = append(d, store)
+    }
+    return d,err
+}
+
+func certsh(domain string) ([]string, error) {
+  fetchURL := fmt.Sprintf("https://crt.sh/?q=%s&output=json", domain)
+  response, err := http.Get(fetchURL)
+
+    if err != nil {
+        fmt.Print(err.Error())
+        os.Exit(1)
+    }
+
+    responseData, err := ioutil.ReadAll(response.Body)
+    if err != nil {
+        log.Fatal(err)
+    }
+  var d []string
+  rdata := string(responseData)
+  result := gjson.Get(rdata, "#.common_name")
+  for _, name := range result.Array() {
+    d = append(d, name.String())
+  }
+  return d,err
 }
